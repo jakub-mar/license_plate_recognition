@@ -5,29 +5,81 @@ import cv2 as cv
 def getContrast(
     image: np.ndarray, topHatSize: int, blackHatSize: int, dilateSize: int
 ) -> np.ndarray:
-    kernelTop = cv.getStructuringElement(cv.MORPH_RECT, (topHatSize, topHatSize))
-    kernelBlack = cv.getStructuringElement(cv.MORPH_RECT, (blackHatSize, blackHatSize))
+    kernelTop = cv.getStructuringElement(cv.MORPH_ELLIPSE, (topHatSize, topHatSize))
+    kernelBlack = cv.getStructuringElement(
+        cv.MORPH_ELLIPSE, (blackHatSize, blackHatSize)
+    )
     tophat = cv.morphologyEx(image, cv.MORPH_TOPHAT, kernelTop)
     blackhat = cv.morphologyEx(image, cv.MORPH_BLACKHAT, kernelBlack)
 
-    addition = cv.add(tophat, blackhat)
-    kerneldilate = cv.getStructuringElement(cv.MORPH_RECT, (dilateSize, dilateSize))
-    result = cv.dilate(addition, kerneldilate)
+    addition = cv.add(tophat, image)
+    subtraction = cv.subtract(addition, blackhat)
 
-    return result
+    alpha = 1.5  # Contrast control (1.0-3.0)
+    beta = 10  # Brightness control (0-100)
+
+    adjusted = cv.convertScaleAbs(subtraction, alpha=alpha, beta=beta)
+    # kerneldilate = cv.getStructuringElement(cv.MORPH_RECT, (dilateSize, dilateSize))
+    # result = cv.dilate(subtraction, kerneldilate)
+
+    return adjusted
+
+
+def getPlate(image: np.ndarray, min: int, max: int):
+    curImg = image
+    canny = cv.Canny(image, min, max)
+
+    dilation_size = 5
+    element = cv.getStructuringElement(
+        cv.MORPH_RECT,
+        (2 * dilation_size + 1, 2 * dilation_size + 1),
+        (dilation_size, dilation_size),
+    )
+    dilated = cv.dilate(canny, element)
+
+    contours, hierarchy = cv.findContours(dilated, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    plateContour = []
+    for contour in contours:
+        x1, y1 = contour[0][0]
+        approx = cv.approxPolyDP(contour, 0.009 * cv.arcLength(contour, True), True)
+        if len(approx) == 4:
+            x, y, w, h = cv.boundingRect(contour)
+            ratio = float(h / w)
+            area = cv.contourArea(contour)
+            if ratio >= 0.2 and ratio <= 0.5 and area >= 100000:
+                plateContour = contour
+    return dilated, plateContour
 
 
 def perform_processing(image: np.ndarray) -> str:
-    image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
-    blurred = cv.blur(image, (5, 5))
+    bilateralSize = 12
+    blurred = cv.bilateralFilter(gray, bilateralSize, 17, 17)
 
-    contrasted = getContrast(blurred, 17, 17, 3)
+    contrasted = getContrast(blurred, 8, 8, 7)
 
-    canny = cv.Canny(contrasted, 10, 255)
+    blurSize = 7
+    blurred = cv.GaussianBlur(contrasted, (blurSize, blurSize), 0)
 
-    canny = cv.resize(canny, (1024, 768))
-    cv.imshow("result", canny)
+    canny, contour = getPlate(blurred, 60, 140)
+    if len(contour) != 0:
+        cv.drawContours(image, [contour], -1, (0, 0, 255), 10)
+
+    contrasted = cv.resize(contrasted, (800, 600))
+    canny = cv.resize(canny, (800, 600))
+    image = cv.resize(image, (800, 600))
+    # cv.imshow("contrasted", contrasted)
+    # cv.imshow("image", image)
+    # cv.imshow("canny", canny)
+
+    grey_3_channel = cv.cvtColor(canny, cv.COLOR_GRAY2BGR)
+
+    numpy_horizontal = np.hstack((image, grey_3_channel))
+
+    numpy_horizontal_concat = np.concatenate((image, grey_3_channel), axis=1)
+    cv.imshow("result", numpy_horizontal_concat)
+
     while True:
         if cv.waitKey(10) == ord("q"):
             cv.destroyAllWindows()
