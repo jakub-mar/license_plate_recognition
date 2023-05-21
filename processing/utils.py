@@ -1,6 +1,9 @@
 import numpy as np
 import cv2 as cv
 
+defTrackbarMin = 60
+defTrackbarMax = 140
+
 
 def getContrast(
     image: np.ndarray, topHatSize: int, blackHatSize: int, dilateSize: int
@@ -41,17 +44,26 @@ def getPlate(image: np.ndarray, min: int, max: int):
     plateContour = []
     for contour in contours:
         x1, y1 = contour[0][0]
-        approx = cv.approxPolyDP(contour, 0.009 * cv.arcLength(contour, True), True)
+        approx = cv.approxPolyDP(contour, 0.011 * cv.arcLength(contour, True), True)
         if len(approx) == 4:
             x, y, w, h = cv.boundingRect(contour)
             ratio = float(h / w)
             area = cv.contourArea(contour)
-            if ratio >= 0.2 and ratio <= 0.5 and area >= 100000:
-                plateContour = contour
-    return dilated, plateContour
+            if ratio >= 0.2 and ratio <= 0.5 and area >= 90000:
+                plateContour.append(contour)
+    return dilated, plateContour, contours
+
+
+def onTrack(arg):
+    pass
 
 
 def perform_processing(image: np.ndarray) -> str:
+    global defTrackbarMax, defTrackbarMin
+    winName = "trackbars"
+    cv.namedWindow(winName)
+    cv.createTrackbar("min", winName, defTrackbarMin, 255, onTrack)
+    cv.createTrackbar("max", winName, defTrackbarMax, 255, onTrack)
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
     bilateralSize = 12
@@ -62,26 +74,31 @@ def perform_processing(image: np.ndarray) -> str:
     blurSize = 7
     blurred = cv.GaussianBlur(contrasted, (blurSize, blurSize), 0)
 
-    canny, contour = getPlate(blurred, 60, 140)
-    if len(contour) != 0:
-        cv.drawContours(image, [contour], -1, (0, 0, 255), 10)
-
-    contrasted = cv.resize(contrasted, (800, 600))
-    canny = cv.resize(canny, (800, 600))
-    image = cv.resize(image, (800, 600))
-    # cv.imshow("contrasted", contrasted)
-    # cv.imshow("image", image)
-    # cv.imshow("canny", canny)
-
-    grey_3_channel = cv.cvtColor(canny, cv.COLOR_GRAY2BGR)
-
-    numpy_horizontal = np.hstack((image, grey_3_channel))
-
-    numpy_horizontal_concat = np.concatenate((image, grey_3_channel), axis=1)
-    cv.imshow("result", numpy_horizontal_concat)
-
     while True:
-        if cv.waitKey(10) == ord("q"):
+        min = cv.getTrackbarPos("min", winName)
+        max = cv.getTrackbarPos("max", winName)
+        defTrackbarMax = max
+        defTrackbarMin = min
+        canny, contour, contours = getPlate(blurred, min, max)
+        cv.drawContours(image, contours, -1, (255, 0, 0), 3)
+        if len(contour) != 0:
+            cv.drawContours(image, contour, -1, (0, 0, 255), 10)
+
+        contrasted = cv.resize(contrasted, (800, 600))
+        canny = cv.resize(canny, (800, 600))
+        image = cv.resize(image, (800, 600))
+        # cv.imshow("contrasted", contrasted)
+        # cv.imshow("image", image)
+        # cv.imshow("canny", canny)
+
+        grey_3_channel = cv.cvtColor(canny, cv.COLOR_GRAY2BGR)
+
+        numpy_horizontal = np.hstack((image, grey_3_channel))
+
+        numpy_horizontal_concat = np.concatenate((image, grey_3_channel), axis=1)
+        cv.imshow("result", numpy_horizontal_concat)
+
+        if cv.waitKey(30) == ord("q"):
             cv.destroyAllWindows()
             break
     return "PO12345"
