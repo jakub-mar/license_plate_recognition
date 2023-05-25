@@ -49,7 +49,7 @@ def getPlate(image: np.ndarray, min: int, max: int):
             x, y, w, h = cv.boundingRect(contour)
             ratio = float(h / w)
             area = cv.contourArea(contour)
-            if ratio >= 0.2 and ratio <= 0.5 and area >= 90000:
+            if ratio >= 0.15 and ratio <= 0.6 and area >= 90000:
                 plateContour.append(contour)
     return dilated, plateContour, contours
 
