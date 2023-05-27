@@ -10,7 +10,7 @@ contours, hierarchy = cv.findContours(img, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
 # contours = contours[1:]
 
 hierarchy = hierarchy[0]
-cv.drawContours(font, contours, -1, (0, 0, 255), 2)
+# cv.drawContours(font, contours, -1, (0, 0, 255), 1)
 
 contours_poly = [None] * len(contours)
 boundRect = [None] * len(contours)
@@ -18,27 +18,73 @@ centers = [None] * len(contours)
 radius = [None] * len(contours)
 for i, c in enumerate(contours):
     if hierarchy[i][3] == 0:
-        print(i, "===", hierarchy[i], "\n\n")
+        # print(i, "===", hierarchy[i], "\n\n")
         contours_poly.append(cv.approxPolyDP(c, 3, True))
         # boundRect.append()
 
-drawing = np.zeros((font.shape[0], font.shape[1], 3), dtype=np.uint8)
+drawing = font.copy()
+# drawing = np.zeros((font.shape[0], font.shape[1], 3), dtype=np.uint8)
 for i in range(len(contours_poly)):
     color = (255, 0, 0)
     # cv.drawContours(drawing, contours_poly, i, color)
-    rect = cv.boundingRect(contours_poly[i])
+    x, y, w, h = cv.boundingRect(contours_poly[i])
     cv.rectangle(
         drawing,
-        (int(rect[0]), int(rect[1])),
+        (int(x), int(y)),
         (
-            int(rect[0] + rect[2]),
-            int(rect[1] + rect[3]),
+            int(x + w),
+            int(y + h),
         ),
         color,
-        2,
+        1,
     )
+    # if (x or y or w or h) == 0:
+    #     break
+    # roi = font[y : y + h, x : x + w]
+    # print(roi.shape)
+    # # cv.imshow("roi", roi)
+    # while True:
+    #     if cv.waitKey(30) == ord("q"):
+    #         break
+    # cv.imwrite(f"./letters/{i}_box.jpg", roi)
+letters = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+]
+for i in range(len(contours_poly)):
+    rect = cv.boundingRect(contours_poly[i])
+    x, y, w, h = rect
+    roi = font[y : y + h, x : x + w]
+    print(i, *rect, sep="   ")
+    if any(v != 0 for v in rect):
+        cv.imwrite(f"./letters/{letters.pop()5}.jpg", roi)
 
 
+cv.imshow("roi", font[0:10, 0:10])
 cv.imshow("font", font)
 cv.imshow("drawing", drawing)
 cv.waitKey(0)

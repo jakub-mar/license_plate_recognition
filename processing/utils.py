@@ -5,6 +5,24 @@ defTrackbarMin = 30
 defTrackbarMax = 65
 
 
+def readLetters(path):
+    letters = {}
+    for letter in path.iterdir():
+        # print(letter, "\n\n")
+        letters[letter[8]] = cv.imread(letter, 0)
+
+    return letters
+
+
+def getPlateLetters(plate):
+    # hierarchy, contours =
+    pass
+
+
+def detectPlateLetters(plate, letters):
+    pass
+
+
 def getContrast(
     image: np.ndarray, topHatSize: int, blackHatSize: int, dilateSize: int
 ) -> np.ndarray:
@@ -61,7 +79,7 @@ def onTrack(arg):
     pass
 
 
-def perform_processing(image: np.ndarray) -> str:
+def perform_processing(image: np.ndarray, letters) -> str:
     global defTrackbarMax, defTrackbarMin
     winName = "trackbars"
     cv.namedWindow(winName)

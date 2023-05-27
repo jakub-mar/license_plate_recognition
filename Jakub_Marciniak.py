@@ -5,6 +5,7 @@ from pathlib import Path
 import cv2
 
 from processing.utils import perform_processing
+from processing.utils import readLetters
 
 
 # python3 Jakub_Marciniak.py ./images results.json
@@ -15,8 +16,9 @@ def main():
     args = parser.parse_args()
 
     images_dir = Path(args.images_dir)
+    letters_dir = Path("./letters")
     results_file = Path(args.results_file)
-
+    letters = readLetters(letters_dir)
     images_paths = sorted(
         [
             image_path
@@ -24,6 +26,7 @@ def main():
             if image_path.name.endswith(".jpg")
         ]
     )
+
     results = {}
     for image_path in images_paths:
         image = cv2.imread(str(image_path))
@@ -31,7 +34,7 @@ def main():
             print(f"Error loading image {image_path}")
             continue
 
-        results[image_path.name] = perform_processing(image)
+        results[image_path.name] = perform_processing(image, letters)
 
     with results_file.open("w") as output_file:
         json.dump(results, output_file, indent=4)
