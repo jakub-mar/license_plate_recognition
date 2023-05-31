@@ -2,16 +2,16 @@ import numpy as np
 import cv2 as cv
 
 defTrackbarMin = 30
-defTrackbarMax = 65
+defTrackbarMax = 45
 
 
-def readLetters(path):
-    letters = {}
-    for letter in path.iterdir():
-        # print(letter, "\n\n")
-        letters[letter[8]] = cv.imread(letter, 0)
+# def readLetters(path):
+#     letters = {}
+#     for letter in path.iterdir():
+#         # print(letter, "\n\n")
+#         letters[letter[8]] = cv.imread(letter, 0)
 
-    return letters
+#     return letters
 
 
 def getPlateLetters(plate):
@@ -50,7 +50,7 @@ def getPlate(image: np.ndarray, min: int, max: int):
     curImg = image
     canny = cv.Canny(image, min, max)
 
-    dilation_size = 5
+    dilation_size = 9
     # (2 * dilation_size + 1, 2 * dilation_size + 1),
     #     (dilation_size, dilation_size),
     element = cv.getStructuringElement(
@@ -59,27 +59,40 @@ def getPlate(image: np.ndarray, min: int, max: int):
         # (dilation_size, dilation_size),
     )
     # np.ones((7, 7), np.uint8)
+    dilated = cv.erode(canny, np.ones((5, 5), np.uint8))
+    dilated = cv.morphologyEx(dilated, cv.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    dilated = cv.morphologyEx(
+        dilated, cv.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=1
+    )
     dilated = cv.dilate(canny, element, iterations=1)
 
     contours, hierarchy = cv.findContours(dilated, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     plateContour = []
+    candidates = []
+
     for contour in contours:
         x1, y1 = contour[0][0]
-        approx = cv.approxPolyDP(contour, 0.011 * cv.arcLength(contour, True), True)
+        approx = cv.approxPolyDP(contour, 0.02 * cv.arcLength(contour, True), True)
         if len(approx) == 4:
             x, y, w, h = cv.boundingRect(contour)
             ratio = float(h / w)
             area = cv.contourArea(contour)
-            if ratio >= 0.15 and ratio <= 0.65 and area >= 90000:
+            if area >= ((image.shape[0] / 3) * (image.shape[1] / 3)) * 0.3:
                 plateContour.append(contour)
-    return dilated, plateContour, contours
+                brect = cv.boundingRect(approx)
+                x, y, w, h = brect
+                # print(x, y, w, h)
+                # if all(x > 0 for br in brect):
+                candidates.append(image[y : y + h, x : x + w])
+
+    return candidates
 
 
 def onTrack(arg):
     pass
 
 
-def perform_processing(image: np.ndarray, letters) -> str:
+def perform_processing(image: np.ndarray) -> str:
     global defTrackbarMax, defTrackbarMin
     winName = "trackbars"
     cv.namedWindow(winName)
@@ -88,27 +101,32 @@ def perform_processing(image: np.ndarray, letters) -> str:
 
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     gray = getContrast(gray, 3, 3, 0)
-    blurred = cv.GaussianBlur(gray, (7, 7), 0)
-    blurred = cv.morphologyEx(blurred, cv.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    # blurred = cv.GaussianBlur(gray, (7, 7), 0)
+    blurred = cv.bilateralFilter(gray, 20, 50, 50)
+    # blurred = cv.morphologyEx(blurred, cv.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
     while True:
         min = cv.getTrackbarPos("min", winName)
         max = cv.getTrackbarPos("max", winName)
         defTrackbarMax = max
         defTrackbarMin = min
-        canny, contour, contours = getPlate(blurred, min, max)
-        if len(contour) != 0:
-            cv.drawContours(image, contour, -1, (0, 0, 255), 10)
+        candidates = getPlate(blurred, min, max)
+        # cv.drawContours(image, contours, -1, (0, 255, 0), 5)
 
-        canny = cv.resize(canny, (800, 600))
+        # if len(contour) != 0:
+        #     cv.drawContours(image, contour, -1, (0, 0, 255), 10)
+        for i, can in enumerate(candidates):
+            cv.imshow(f"cand_{i}", cv.resize(can, (1100, 500)))
+
+        # canny = cv.resize(canny, (800, 600))
         image = cv.resize(image, (800, 600))
 
-        grey_3_channel = cv.cvtColor(canny, cv.COLOR_GRAY2BGR)
+        # grey_3_channel = cv.cvtColor(canny, cv.COLOR_GRAY2BGR)
 
-        numpy_horizontal = np.hstack((image, grey_3_channel))
+        # numpy_horizontal = np.hstack((image, grey_3_channel))
 
-        numpy_horizontal_concat = np.concatenate((image, grey_3_channel), axis=1)
-        cv.imshow(winName, numpy_horizontal_concat)
+        # numpy_horizontal_concat = np.concatenate((image, grey_3_channel), axis=1)
+        # cv.imshow(winName, numpy_horizontal_concat)
         # cv.imshow("gray", cv.resize(gray, (800, 600)))
 
         if cv.waitKey(30) == ord("q"):
