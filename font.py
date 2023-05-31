@@ -81,7 +81,7 @@ for i in range(len(contours_poly)):
     roi = font[y : y + h, x : x + w]
     print(i, *rect, sep="   ")
     if any(v != 0 for v in rect):
-        cv.imwrite(f"./letters/{letters.pop()5}.jpg", roi)
+        cv.imwrite(f"./letters/{letters.pop()}.jpg", roi)
 
 
 cv.imshow("roi", font[0:10, 0:10])
