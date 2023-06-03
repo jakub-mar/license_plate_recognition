@@ -19,17 +19,31 @@ def getPlateLetters(plate):
     pass
 
 
-def getPlateNumbers(plate, image, i):
-    ret, thresh = cv.threshold(plate, 200, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
+def getPlateNumbers(plate, image, i, min, max):
+    plate = cv.GaussianBlur(plate, (5, 5), 12)
+    ret, thresh = cv.threshold(plate, 127, 255, cv.THRESH_OTSU)
+    # thresh = cv.bitwise_not(thresh)
+    thresh = cv.erode(thresh, np.ones((4, 4), np.uint8), iterations=1)
+    # thresh = cv.bitwise_not(thresh)
     contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     cv.drawContours(image, contours, -1, (255, 0, 0), 5)
-
+    thresh2 = cv.cvtColor(thresh, cv.COLOR_GRAY2BGR)
     for i, cnt in enumerate(contours):
         x, y, w, h = cv.boundingRect(cnt)
-        if h >= thresh.shape[0] / 2:
-            cv.drawContours(thresh, [cnt], -1, (0, 255, 0), 5)
+        (px, py), (width, height), angle = cv.minAreaRect(cnt)
+        # print(width, height, "\n\n")
+        # factor = width / height
+        # if (
+        #     cv.contourArea(cnt) > 5000
+        #     and (width / height) <= 6
+        #     and (width / height) >= 3
+        # ):
+        approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
+        if cv.contourArea(cnt) > 4000 and len(approx) == 4:
+            cv.drawContours(thresh2, [cnt], -1, (0, 255, 0), 5)
 
-    cv.imshow(f"plate_{i}", image)
+    # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
+    cv.imshow(f"thresh_{i}", cv.resize(thresh2, (800, 600)))
 
 
 def getContrast(
@@ -42,9 +56,9 @@ def getContrast(
     return adjusted
 
 
-def getPlate(image: np.ndarray, min: int, max: int):
+def getPlate(image: np.ndarray):
     curImg = image
-    canny = cv.Canny(image, min, max)
+    canny = cv.Canny(image, 30, 45)
 
     dilation_size = 9
     element = cv.getStructuringElement(
@@ -81,8 +95,8 @@ def getPlate(image: np.ndarray, min: int, max: int):
                 candidates_boxes.append(brect)
                 candidates.append(
                     image[
-                        int(y * 0.98) : int((y + h) * 1.02),
-                        int(x * 0.98) : int((x + w) * 1.02),
+                        int(y * 0.95) : int((y + h) * 1.05),
+                        int(x * 0.95) : int((x + w) * 1.05),
                     ]
                 )
 
@@ -108,7 +122,7 @@ def perform_processing(image: np.ndarray) -> str:
     max = cv.getTrackbarPos("max", winName)
     defTrackbarMax = max
     defTrackbarMin = min
-    candidates, candidates_boxes = getPlate(blurred, min, max)
+    candidates, candidates_boxes = getPlate(blurred)
 
     numbers = []
     for i, can in enumerate(candidates):
@@ -122,6 +136,8 @@ def perform_processing(image: np.ndarray) -> str:
                     int(x * 0.98) : int((x + w) * 1.02),
                 ],
                 i,
+                min,
+                max,
             )
         )
 
