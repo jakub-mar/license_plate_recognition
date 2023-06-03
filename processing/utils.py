@@ -20,30 +20,25 @@ def getPlateLetters(plate):
 
 
 def getPlateNumbers(plate, image, i, min, max):
+    candidateNum = i
     plate = cv.GaussianBlur(plate, (5, 5), 12)
-    ret, thresh = cv.threshold(plate, 127, 255, cv.THRESH_OTSU)
-    # thresh = cv.bitwise_not(thresh)
+    ret, thresh = cv.threshold(plate, 90, 255, cv.THRESH_OTSU)
     thresh = cv.erode(thresh, np.ones((4, 4), np.uint8), iterations=1)
-    # thresh = cv.bitwise_not(thresh)
-    contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-    cv.drawContours(image, contours, -1, (255, 0, 0), 5)
+    contours, hierarchy = cv.findContours(
+        thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE
+    )
     thresh2 = cv.cvtColor(thresh, cv.COLOR_GRAY2BGR)
+    hierarchy = hierarchy[0]
     for i, cnt in enumerate(contours):
-        x, y, w, h = cv.boundingRect(cnt)
-        (px, py), (width, height), angle = cv.minAreaRect(cnt)
-        # print(width, height, "\n\n")
-        # factor = width / height
-        # if (
-        #     cv.contourArea(cnt) > 5000
-        #     and (width / height) <= 6
-        #     and (width / height) >= 3
-        # ):
+        cv.drawContours(thresh2, [cnt], -1, (255, 0, 0), 2)
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
+        (x, y), (w, h), angle = cv.minAreaRect(cnt)
         if cv.contourArea(cnt) > 4000 and len(approx) == 4:
-            cv.drawContours(thresh2, [cnt], -1, (0, 255, 0), 5)
+            if ((w / h) <= 6 and (w / h) >= 3) or ((w / h) >= 0.1 and (w / h) <= 0.38):
+                cv.drawContours(thresh2, [cnt], -1, (0, 255, 0), 5)
 
     # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
-    cv.imshow(f"thresh_{i}", cv.resize(thresh2, (800, 600)))
+    cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
 
 
 def getContrast(
@@ -95,8 +90,8 @@ def getPlate(image: np.ndarray):
                 candidates_boxes.append(brect)
                 candidates.append(
                     image[
-                        int(y * 0.95) : int((y + h) * 1.05),
-                        int(x * 0.95) : int((x + w) * 1.05),
+                        int(y * 0.94) : int((y + h) * 1.06),
+                        int(x * 0.94) : int((x + w) * 1.06),
                     ]
                 )
 
