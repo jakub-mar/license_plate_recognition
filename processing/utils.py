@@ -1,9 +1,6 @@
 import numpy as np
 import cv2 as cv
 
-defTrackbarMin = 30
-defTrackbarMax = 45
-
 
 # def readLetters(path):
 #     letters = {}
@@ -15,11 +12,13 @@ defTrackbarMax = 45
 
 
 def getPlateLetters(plate):
+    if not plate:
+        return ""
     # hierarchy, contours =
     pass
 
 
-def getPlateNumbers(plate, image, i, min, max):
+def getWhitePlate(plate, image, i):
     candidateNum = i
     plate = cv.GaussianBlur(plate, (5, 5), 12)
     ret, thresh = cv.threshold(plate, 90, 255, cv.THRESH_OTSU)
@@ -28,17 +27,27 @@ def getPlateNumbers(plate, image, i, min, max):
         thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE
     )
     thresh2 = cv.cvtColor(thresh, cv.COLOR_GRAY2BGR)
+    mask = np.zeros_like(thresh2)
     hierarchy = hierarchy[0]
+    contoursToDraw = []
     for i, cnt in enumerate(contours):
-        cv.drawContours(thresh2, [cnt], -1, (255, 0, 0), 2)
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
         (x, y), (w, h), angle = cv.minAreaRect(cnt)
         if cv.contourArea(cnt) > 4000 and len(approx) == 4:
             if ((w / h) <= 6 and (w / h) >= 3) or ((w / h) >= 0.1 and (w / h) <= 0.38):
-                cv.drawContours(thresh2, [cnt], -1, (0, 255, 0), 5)
+                contoursToDraw.append(cnt)
 
+    if len(contoursToDraw):
+        cont = sorted(contoursToDraw, key=cv.contourArea, reverse=True)[0]
+        cv.drawContours(mask, [cont], -1, (255, 255, 255), -1)
+        res = cv.bitwise_and(thresh2, mask)
+        # cv.imshow(f"threshmask_{candidateNum}++", cv.resize(res, (800, 600)))
+        return res
+    # cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
+    # print(type(res))
     # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
-    cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
+    if not len(contoursToDraw):
+        return None
 
 
 def getContrast(
@@ -103,38 +112,25 @@ def onTrack(arg):
 
 
 def perform_processing(image: np.ndarray) -> str:
-    global defTrackbarMax, defTrackbarMin
-    winName = "trackbars"
-    cv.namedWindow(winName)
-    cv.createTrackbar("min", winName, defTrackbarMin, 255, onTrack)
-    cv.createTrackbar("max", winName, defTrackbarMax, 255, onTrack)
-
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     gray = getContrast(gray, 3, 3, 0)
     blurred = cv.bilateralFilter(gray, 20, 50, 50)
 
-    min = cv.getTrackbarPos("min", winName)
-    max = cv.getTrackbarPos("max", winName)
-    defTrackbarMax = max
-    defTrackbarMin = min
     candidates, candidates_boxes = getPlate(blurred)
 
     numbers = []
     for i, can in enumerate(candidates):
         # cv.imshow(f"cand_{i}", cv.resize(can, (1100, 500)))
         x, y, w, h = candidates_boxes[i]
-        numbers.append(
-            getPlateNumbers(
-                can,
-                image[
-                    int(y * 0.98) : int((y + h) * 1.02),
-                    int(x * 0.98) : int((x + w) * 1.02),
-                ],
-                i,
-                min,
-                max,
-            )
+        getWhitePlate(
+            can,
+            image[
+                int(y * 0.98) : int((y + h) * 1.02),
+                int(x * 0.98) : int((x + w) * 1.02),
+            ],
+            i,
         )
+        # numbers.append(getPlateLetters(whitePlate))
 
     image = cv.resize(image, (800, 600))
 
