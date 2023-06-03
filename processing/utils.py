@@ -9,13 +9,28 @@ import cv2 as cv
 #         letters[letter[8]] = cv.imread(letter, 0)
 
 #     return letters
+# 27,15
+# 85,85
 
 
 def getPlateLetters(plate):
-    if not plate:
+    if plate.all(None) or not plate.shape:
         return ""
-    # hierarchy, contours =
-    pass
+    plateG = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
+    contours, hierarchy = cv.findContours(plateG, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    if contours:
+        cv.drawContours(plate, contours, -1, (0, 255, 0), 3)
+    for i, cnt in enumerate(contours):
+        x, y, w, h = cv.boundingRect(cnt)
+        approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
+        if h >= plate.shape[0] / 3:
+            print(w / h)
+            if (w / h) >= 0.25 and (w / h) <= 1.2:
+                cv.drawContours(plate, [cnt], -1, (0, 0, 255), 5)
+
+    # for i, cnt in enumerate(contours):
+    # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
+    cv.imshow("plate", cv.resize(plate, (520, 114)))
 
 
 def getWhitePlate(plate, image, i):
@@ -47,7 +62,7 @@ def getWhitePlate(plate, image, i):
     # print(type(res))
     # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
     if not len(contoursToDraw):
-        return None
+        return np.array(None)
 
 
 def getContrast(
@@ -122,7 +137,7 @@ def perform_processing(image: np.ndarray) -> str:
     for i, can in enumerate(candidates):
         # cv.imshow(f"cand_{i}", cv.resize(can, (1100, 500)))
         x, y, w, h = candidates_boxes[i]
-        getWhitePlate(
+        whitePlate = getWhitePlate(
             can,
             image[
                 int(y * 0.98) : int((y + h) * 1.02),
@@ -130,7 +145,7 @@ def perform_processing(image: np.ndarray) -> str:
             ],
             i,
         )
-        # numbers.append(getPlateLetters(whitePlate))
+        numbers.append(getPlateLetters(whitePlate))
 
     image = cv.resize(image, (800, 600))
 
