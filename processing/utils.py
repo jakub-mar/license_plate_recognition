@@ -1,16 +1,39 @@
 import numpy as np
 import cv2 as cv
+import imutils
+from imutils import contours
 
 
-# def readLetters(path):
-#     letters = {}
-#     for letter in path.iterdir():
-#         # print(letter, "\n\n")
-#         letters[letter[8]] = cv.imread(letter, 0)
+def readLetters(path):
+    letters = {}
+    for letter in path.iterdir():
+        letterName = str(letter)[8]
+        letters[letterName] = cv.imread(str(letter), 0)
 
-#     return letters
-# 27,15
-# 85,85
+    return letters
+
+
+def matchLetter(letter, letters):
+    results = {}
+    maxResult = 0
+    bestVal = None
+    for l in letters:
+        # print(l)
+        # letters[l] = cv.cvtColor(letters[l], cv.COLOR_BGR2GRAY)
+        # letter = cv.cvtColor(letter, cv.COLOR_BGR2GRAY)
+        letters[l] = letters[l].astype(np.uint8)
+        letter = letter.astype(np.uint8)
+        # print(letters[l].shape)
+        # print(letter.shape)
+        # print("\n\n")
+        result = cv.matchTemplate(letter, letters[l], cv.TM_CCORR_NORMED)
+        _, max_val, _, max_loc = cv.minMaxLoc(result)
+        if max_val > maxResult:
+            bestVal = l
+            maxResult = max_val
+
+    # print(bestVal)
+    return str(bestVal)
 
 
 def crop_minAreaRect(img, rect, i):
@@ -30,55 +53,54 @@ def crop_minAreaRect(img, rect, i):
     img_crop = img_rot[pts[1][1] : pts[0][1], pts[1][0] : pts[2][0]]
 
     # print(img_crop, "\n\n")
-    if not img_crop.all(None) or img_crop.shape:
-        cv.imshow(f"{i}", img_crop)
+    # if not img_crop.all(None) or img_crop.shape:
+    #     cv.imshow(f"{i}", img_crop)
     # return img_crop
 
 
-def getPlateLetters(plate):
+def getPlateLetters(plate, letters):
     if plate.all(None) or not plate.shape:
         return ""
     plateG = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
-    contours, hierarchy = cv.findContours(plateG, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-    if contours:
-        cv.drawContours(plate, contours, -1, (0, 255, 0), 3)
+    ctr = cv.findContours(plateG, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    # cv.drawContours(plate, contours, 2, (255, 0, 0), 5)
+    # cv.imshow("test", plate)
+    contours2 = imutils.grab_contours(ctr)
+    (contours2, bboxes) = contours.sort_contours(contours2, method="left-to-right")
+    # print("contours2", contours2)
     letters_candidates = []
-    for i, cnt in enumerate(contours):
+    for i, cnt in enumerate(contours2):
         x, y, w, h = cv.boundingRect(cnt)
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
         if h >= plate.shape[0] / 3 and (w / h) >= 0.25 and (w / h) <= 1.2:
-            cv.drawContours(plate, [cnt], -1, (0, 0, 255), 5)
+            # cv.drawContours(plate, [cnt], -1, (0, 0, 255), 5)
             letters_candidates.append(cnt)
             # crop_minAreaRect(plate, rect, i)
-            # cv.imshow(f"{i}_letter", imgCrop)
     letters_sorted = sorted(
         letters_candidates,
         key=lambda a: cv.boundingRect(a)[3],
-        reverse=True,
+        reverse=False,
     )[:7]
-    for let in letters_sorted:
-        # x, y, w, h = cv.boundingRect(let)
+    letters_roi = []
+    for let in letters_candidates:
+        x, y, w, h = cv.boundingRect(let)
+        pts1 = np.float32([[x, y], [x + w, y], [x, y + h], [x + w, y + h]])
+        pts2 = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
+        matrix = cv.getPerspectiveTransform(pts1, pts2)
+        result = cv.warpPerspective(plateG, matrix, (w, h))
+        letters_roi.append(result)
+        # cv.imshow(f"test_{i}", result)
         rect = cv.minAreaRect(let)
         box = cv.boxPoints(rect)
         box = np.int0(box)
-        # cv.rectangle(
-        #     plate,
-        #     (x, y),
-        #     (x + w, y + h),
-        #     (255, 0, 255),
-        #     5,
-        # )
-        cv.drawContours(
-            plate,
-            [box],
-            -1,
-            (255, 0, 255),
-            5,
-        )
 
-    # for i, cnt in enumerate(contours):
-    # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
-    cv.imshow("plate", cv.resize(plate, (520 * 2, 114 * 2)))
+    plateString = []
+    for i, cnt in enumerate(letters_roi):
+        letter = cv.resize(cnt, (64, 64), interpolation=cv.INTER_AREA)
+        plateString.append(matchLetter(letter, letters))
+        # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
+        # cv.imshow(f"plate_{i}", cnt)
+    print("".join(plateString))
 
 
 def getWhitePlate(plate, image, i):
@@ -174,10 +196,11 @@ def onTrack(arg):
     pass
 
 
-def perform_processing(image: np.ndarray) -> str:
+def perform_processing(image: np.ndarray, letters) -> str:
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     gray = getContrast(gray, 3, 3, 0)
     blurred = cv.bilateralFilter(gray, 20, 50, 50)
+    cv.imshow("orig", cv.resize(gray, (800, 600)))
 
     candidates, candidates_boxes = getPlate(blurred)
 
@@ -193,7 +216,7 @@ def perform_processing(image: np.ndarray) -> str:
             ],
             i,
         )
-        numbers.append(getPlateLetters(whitePlate))
+        numbers.append(getPlateLetters(whitePlate, letters))
 
     image = cv.resize(image, (800, 600))
 
