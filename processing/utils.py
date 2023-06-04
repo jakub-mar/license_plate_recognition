@@ -13,6 +13,28 @@ import cv2 as cv
 # 85,85
 
 
+def crop_minAreaRect(img, rect, i):
+    # rotate img
+    angle = rect[2]
+    rows, cols = img.shape[0], img.shape[1]
+    M = cv.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
+    img_rot = cv.warpAffine(img, M, (cols, rows))
+
+    # # rotate bounding box
+    rect0 = (rect[0], rect[1], 0.0)
+    box = cv.boxPoints(rect0)
+    pts = np.int0(cv.transform(np.array([box]), M))[0]
+    pts[pts < 0] = 0
+
+    # crop
+    img_crop = img_rot[pts[1][1] : pts[0][1], pts[1][0] : pts[2][0]]
+
+    # print(img_crop, "\n\n")
+    if not img_crop.all(None) or img_crop.shape:
+        cv.imshow(f"{i}", img_crop)
+    # return img_crop
+
+
 def getPlateLetters(plate):
     if plate.all(None) or not plate.shape:
         return ""
@@ -20,17 +42,43 @@ def getPlateLetters(plate):
     contours, hierarchy = cv.findContours(plateG, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     if contours:
         cv.drawContours(plate, contours, -1, (0, 255, 0), 3)
+    letters_candidates = []
     for i, cnt in enumerate(contours):
         x, y, w, h = cv.boundingRect(cnt)
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
-        if h >= plate.shape[0] / 3:
-            print(w / h)
-            if (w / h) >= 0.25 and (w / h) <= 1.2:
-                cv.drawContours(plate, [cnt], -1, (0, 0, 255), 5)
+        if h >= plate.shape[0] / 3 and (w / h) >= 0.25 and (w / h) <= 1.2:
+            cv.drawContours(plate, [cnt], -1, (0, 0, 255), 5)
+            letters_candidates.append(cnt)
+            # crop_minAreaRect(plate, rect, i)
+            # cv.imshow(f"{i}_letter", imgCrop)
+    letters_sorted = sorted(
+        letters_candidates,
+        key=lambda a: cv.boundingRect(a)[3],
+        reverse=True,
+    )[:7]
+    for let in letters_sorted:
+        # x, y, w, h = cv.boundingRect(let)
+        rect = cv.minAreaRect(let)
+        box = cv.boxPoints(rect)
+        box = np.int0(box)
+        # cv.rectangle(
+        #     plate,
+        #     (x, y),
+        #     (x + w, y + h),
+        #     (255, 0, 255),
+        #     5,
+        # )
+        cv.drawContours(
+            plate,
+            [box],
+            -1,
+            (255, 0, 255),
+            5,
+        )
 
     # for i, cnt in enumerate(contours):
     # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
-    cv.imshow("plate", cv.resize(plate, (520, 114)))
+    cv.imshow("plate", cv.resize(plate, (520 * 2, 114 * 2)))
 
 
 def getWhitePlate(plate, image, i):
