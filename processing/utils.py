@@ -101,6 +101,7 @@ def getPlateLetters(plate, letters):
         # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
         # cv.imshow(f"plate_{i}", cnt)
     print("".join(plateString))
+    return "".join(plateString)
 
 
 def getWhitePlate(plate, image, i):
@@ -222,4 +223,7 @@ def perform_processing(image: np.ndarray, letters) -> str:
 
     if cv.waitKey(0) == ord("q"):
         cv.destroyAllWindows()
-    return "PO12345"
+
+    print(numbers)
+    print(numbers.sort(key=len, reverse=True))
+    return numbers[0]
