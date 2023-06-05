@@ -26,7 +26,7 @@ def matchLetter(letter, letters):
         # print(letters[l].shape)
         # print(letter.shape)
         # print("\n\n")
-        result = cv.matchTemplate(letter, letters[l], cv.TM_CCORR_NORMED)
+        result = cv.matchTemplate(letter, letters[l], cv.TM_CCOEFF)
         _, max_val, _, max_loc = cv.minMaxLoc(result)
         if max_val > maxResult:
             bestVal = l
@@ -106,14 +106,30 @@ def getPlateLetters(plate, letters):
 
 def getWhitePlate(plate, image, i):
     candidateNum = i
-    plate = cv.GaussianBlur(plate, (5, 5), 12)
-    ret, thresh = cv.threshold(plate, 90, 255, cv.THRESH_OTSU)
-    thresh = cv.erode(thresh, np.ones((4, 4), np.uint8), iterations=1)
-    contours, hierarchy = cv.findContours(
-        thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE
+    # plate = cv.GaussianBlur(plate, (9, 9), 7)
+    plate = cv.bilateralFilter(plate, 5, 20, 20)
+
+    # plate = cv.medianBlur(plate, 7)
+    # ret, thresh = cv.threshold(plate, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
+    # thresh = cv.adaptiveThreshold(
+    #     plate, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 1.2
+    # )
+    thresh = cv.adaptiveThreshold(
+        plate, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 19, 0.8
     )
+    thresh = cv.erode(thresh, np.ones((5, 5), np.uint8))
+    # thresh = cv.dilate(thresh, (21, 21))
+    # thresh = cv.morphologyEx(thresh, cv.MORPH_OPEN, (3, 3))
+    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, (3, 3))
+    # thresh = cv.dilate(thresh, (1, 1))
+    cv.imshow(f"raw_thresh_{i}", cv.resize(thresh, (1024, 768)))
+    contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     thresh2 = cv.cvtColor(thresh, cv.COLOR_GRAY2BGR)
+    # cv.drawContours(thresh2, contours, -1, (0, 255, 0), 4)
+    # cv.imshow(f"adaptive{i}", cv.resize(thresh2, (800, 600)))
+    # cv.imshow(f"test_{i}", cv.resize(thresh2, (800, 600)))
     mask = np.zeros_like(thresh2)
+    # if hierarchy != None and len(hierarchy):
     hierarchy = hierarchy[0]
     contoursToDraw = []
     for i, cnt in enumerate(contours):
@@ -127,7 +143,19 @@ def getWhitePlate(plate, image, i):
         cont = sorted(contoursToDraw, key=cv.contourArea, reverse=True)[0]
         cv.drawContours(mask, [cont], -1, (255, 255, 255), -1)
         res = cv.bitwise_and(thresh2, mask)
-        # cv.imshow(f"threshmask_{candidateNum}++", cv.resize(res, (800, 600)))
+        # res = res.astype(np.uint8)
+        resG = cv.cvtColor(res, cv.COLOR_BGR2GRAY)
+        c, h = cv.findContours(resG, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+        if len(c):
+            # cv.drawContours(res, c, -1,
+            # (255, 0, 0), 5)
+            for cnt in c:
+                # rect = cv.minAreaRect(cnt)
+                rect = cv.convexHull(cnt)
+                # box = cv.boxPoints(rect)
+                # box = np.int0(box)
+                cv.drawContours(res, [rect], -1, (255, 0, 0), 5)
+        cv.imshow(f"threshmask_{candidateNum}+3+", cv.resize(res, (520 * 2, 114 * 2)))
         return res
     # cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
     # print(type(res))
@@ -201,7 +229,7 @@ def perform_processing(image: np.ndarray, letters) -> str:
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     gray = getContrast(gray, 3, 3, 0)
     blurred = cv.bilateralFilter(gray, 20, 50, 50)
-    cv.imshow("orig", cv.resize(gray, (800, 600)))
+    # cv.imshow("orig", cv.resize(gray, (800, 600)))
 
     candidates, candidates_boxes = getPlate(blurred)
 
