@@ -107,22 +107,17 @@ def getPlateLetters(plate, letters):
 def getWhitePlate(plate, image, i):
     candidateNum = i
     # plate = cv.GaussianBlur(plate, (9, 9), 7)
-    plate = cv.bilateralFilter(plate, 5, 20, 20)
+    # plate = cv.bilateralFilter(plate, 7, 0, 0)
+    plate = cv.blur(plate, (7, 7))
 
     # plate = cv.medianBlur(plate, 7)
     # ret, thresh = cv.threshold(plate, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
-    # thresh = cv.adaptiveThreshold(
-    #     plate, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 1.2
-    # )
     thresh = cv.adaptiveThreshold(
-        plate, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 19, 0.8
+        plate, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 7, 0.9
     )
-    thresh = cv.erode(thresh, np.ones((5, 5), np.uint8))
-    # thresh = cv.dilate(thresh, (21, 21))
-    # thresh = cv.morphologyEx(thresh, cv.MORPH_OPEN, (3, 3))
-    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, (3, 3))
-    # thresh = cv.dilate(thresh, (1, 1))
-    cv.imshow(f"raw_thresh_{i}", cv.resize(thresh, (1024, 768)))
+    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, (7, 7))
+    thresh = cv.erode(thresh, np.ones((7, 7), np.uint8))
+    thresh = cv.morphologyEx(thresh, cv.MORPH_OPEN, (7, 7))
     contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     thresh2 = cv.cvtColor(thresh, cv.COLOR_GRAY2BGR)
     # cv.drawContours(thresh2, contours, -1, (0, 255, 0), 4)
