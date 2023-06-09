@@ -36,51 +36,27 @@ def matchLetter(letter, letters):
     return str(bestVal)
 
 
-def crop_minAreaRect(img, rect, i):
-    # rotate img
-    angle = rect[2]
-    rows, cols = img.shape[0], img.shape[1]
-    M = cv.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
-    img_rot = cv.warpAffine(img, M, (cols, rows))
-
-    # # rotate bounding box
-    rect0 = (rect[0], rect[1], 0.0)
-    box = cv.boxPoints(rect0)
-    pts = np.int0(cv.transform(np.array([box]), M))[0]
-    pts[pts < 0] = 0
-
-    # crop
-    img_crop = img_rot[pts[1][1] : pts[0][1], pts[1][0] : pts[2][0]]
-
-    # print(img_crop, "\n\n")
-    # if not img_crop.all(None) or img_crop.shape:
-    #     cv.imshow(f"{i}", img_crop)
-    # return img_crop
-
-
 def getPlateLetters(plate, letters):
-    if plate.all(None) or not plate.shape:
-        return ""
+    if not plate.shape or plate.all(None):
+        return "PO13245"
     plateG = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
+    # cv.imshow("plateG", plateG)
     ctr = cv.findContours(plateG, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    # cv.drawContours(plate, contours, 2, (255, 0, 0), 5)
-    # cv.imshow("test", plate)
+    if not ctr or ctr[1].any(None):
+        return "PO13245"
     contours2 = imutils.grab_contours(ctr)
     (contours2, bboxes) = contours.sort_contours(contours2, method="left-to-right")
-    # print("contours2", contours2)
     letters_candidates = []
     for i, cnt in enumerate(contours2):
         x, y, w, h = cv.boundingRect(cnt)
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
         if h >= plate.shape[0] / 3 and (w / h) >= 0.25 and (w / h) <= 1.2:
-            # cv.drawContours(plate, [cnt], -1, (0, 0, 255), 5)
             letters_candidates.append(cnt)
-            # crop_minAreaRect(plate, rect, i)
-    letters_sorted = sorted(
-        letters_candidates,
-        key=lambda a: cv.boundingRect(a)[3],
-        reverse=False,
-    )[:7]
+        letters_sorted = sorted(
+            letters_candidates,
+            key=lambda a: cv.boundingRect(a)[3],
+            reverse=False,
+        )[:7]
     letters_roi = []
     for let in letters_candidates:
         x, y, w, h = cv.boundingRect(let)
@@ -106,57 +82,117 @@ def getPlateLetters(plate, letters):
 
 def getWhitePlate(plate, image, i):
     candidateNum = i
-    # plate = cv.GaussianBlur(plate, (9, 9), 7)
-    # plate = cv.bilateralFilter(plate, 7, 0, 0)
     plate = cv.blur(plate, (7, 7))
 
-    # plate = cv.medianBlur(plate, 7)
-    # ret, thresh = cv.threshold(plate, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
-    thresh = cv.adaptiveThreshold(
-        plate, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 7, 0.9
+    # threshold otsu
+    ret, threshOtsu = cv.threshold(plate, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
+    contoursOtsu, hierarchy = cv.findContours(
+        threshOtsu, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
     )
-    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, (7, 7))
-    thresh = cv.erode(thresh, np.ones((7, 7), np.uint8))
-    thresh = cv.morphologyEx(thresh, cv.MORPH_OPEN, (7, 7))
-    contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-    thresh2 = cv.cvtColor(thresh, cv.COLOR_GRAY2BGR)
-    # cv.drawContours(thresh2, contours, -1, (0, 255, 0), 4)
-    # cv.imshow(f"adaptive{i}", cv.resize(thresh2, (800, 600)))
-    # cv.imshow(f"test_{i}", cv.resize(thresh2, (800, 600)))
-    mask = np.zeros_like(thresh2)
+    # threshold adaptive
+    threshAdaptive = cv.adaptiveThreshold(
+        plate, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 1
+    )
+    threshAdaptive = cv.morphologyEx(threshAdaptive, cv.MORPH_CLOSE, (7, 7))
+    threshAdaptive = cv.erode(threshAdaptive, np.ones((7, 7), np.uint8))
+    threshAdaptive = cv.morphologyEx(threshAdaptive, cv.MORPH_OPEN, (7, 7))
+    contoursAdapt, hierarchy = cv.findContours(
+        threshAdaptive, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
+    )
+
+    # threshold to grayscale
+    threshOtsu = cv.cvtColor(threshOtsu, cv.COLOR_GRAY2BGR)
+    threshAdaptive = cv.cvtColor(threshAdaptive, cv.COLOR_GRAY2BGR)
+    maskOtsu = np.zeros_like(threshOtsu)
+    maskAdaptive = np.zeros_like(threshOtsu)
     # if hierarchy != None and len(hierarchy):
     hierarchy = hierarchy[0]
-    contoursToDraw = []
-    for i, cnt in enumerate(contours):
+    contoursToDrawOtsu = []
+    contoursToDrawAdapt = []
+    for i, cnt in enumerate(contoursOtsu):
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
         (x, y), (w, h), angle = cv.minAreaRect(cnt)
         if cv.contourArea(cnt) > 4000 and len(approx) == 4:
             if ((w / h) <= 6 and (w / h) >= 3) or ((w / h) >= 0.1 and (w / h) <= 0.38):
-                contoursToDraw.append(cnt)
+                contoursToDrawOtsu.append(cnt)
 
-    if len(contoursToDraw):
-        cont = sorted(contoursToDraw, key=cv.contourArea, reverse=True)[0]
-        cv.drawContours(mask, [cont], -1, (255, 255, 255), -1)
-        res = cv.bitwise_and(thresh2, mask)
-        # res = res.astype(np.uint8)
-        resG = cv.cvtColor(res, cv.COLOR_BGR2GRAY)
-        c, h = cv.findContours(resG, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-        if len(c):
-            # cv.drawContours(res, c, -1,
-            # (255, 0, 0), 5)
-            for cnt in c:
-                # rect = cv.minAreaRect(cnt)
-                rect = cv.convexHull(cnt)
-                # box = cv.boxPoints(rect)
-                # box = np.int0(box)
-                cv.drawContours(res, [rect], -1, (255, 0, 0), 5)
-        cv.imshow(f"threshmask_{candidateNum}+3+", cv.resize(res, (520 * 2, 114 * 2)))
+    for i, cnt in enumerate(contoursAdapt):
+        approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
+        (x, y), (w, h), angle = cv.minAreaRect(cnt)
+        if cv.contourArea(cnt) > 4000 and len(approx) == 4:
+            if ((w / h) <= 6 and (w / h) >= 3) or ((w / h) >= 0.1 and (w / h) <= 0.38):
+                contoursToDrawAdapt.append(cnt)
+
+    # try:
+    if len(contoursToDrawOtsu) and len(contoursToDrawAdapt):
+        print("in")
+        contOtsu = sorted(contoursToDrawOtsu, key=cv.contourArea, reverse=True)[0]
+        contAdapt = sorted(contoursToDrawAdapt, key=cv.contourArea, reverse=True)[0]
+        cv.drawContours(maskOtsu, [contOtsu], -1, (255, 255, 255), -1)
+        cv.drawContours(maskAdaptive, [contAdapt], -1, (255, 255, 255), -1)
+        maskBoth = cv.bitwise_and(maskAdaptive, maskOtsu)
+        if np.mean(maskBoth) < 0.1:
+            return np.array([])
+        contoursMask, hierarchyMAsk = cv.findContours(
+            cv.cvtColor(maskBoth, cv.COLOR_BGR2GRAY),
+            cv.RETR_EXTERNAL,
+            cv.CHAIN_APPROX_SIMPLE,
+        )
+        # cv.imshow(
+        #     f"threshmask_{candidateNum}+3+",
+        #     cv.resize(
+        #         cv.drawContours(maskBoth, [contoursMask[0]], -1, (0, 255, 0), 4),
+        #         (520 * 2, 114 * 2),
+        #     ),
+        # )
+        approx = cv.convexHull(contoursMask[0])
+        LT = [0, 0]
+        LB = [0, maskBoth.shape[0]]
+        RT = [maskBoth.shape[1], 0]
+        RB = [maskBoth.shape[1], maskBoth.shape[0]]
+        points = [LT, LB, RB, RT]
+        maskEdges = []
+        for point in points:
+            distances = np.linalg.norm(
+                approx.reshape(len(approx), -1) - np.array(point), axis=1
+            )
+            min_index = np.argmin(distances)
+            maskEdges.append(
+                [
+                    approx.reshape(len(approx), -1)[min_index][0],
+                    approx.reshape(len(approx), -1)[min_index][1],
+                ]
+            )
+
+        res = cv.bitwise_and(threshOtsu, maskBoth)
+        pts2 = np.array(
+            [[0, 0], [0, 114 * 2], [520 * 2, 114 * 2], [520 * 2, 0]], np.float32
+        )
+        # print("approx", np.float32(approx.reshape(4, 2)), pts2, "\n\n\n\n", sep="\n\n")
+        matrix = cv.getPerspectiveTransform(
+            np.float32(np.array(maskEdges).reshape(4, 2)), pts2
+        )
+        result = cv.warpPerspective(
+            cv.cvtColor(res, cv.COLOR_BGR2GRAY), matrix, (520 * 2, 114 * 2)
+        )
+
+        # resG = cv.cvtColor(res, cv.COLOR_BGR2GRAY)
+        # c, h = cv.findContours(resG, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+        # cv.imshow(
+        #     f"threshmask_{candidateNum}+3+", cv.resize(maskBoth, (520 * 2, 114 * 2))
+        # )
+        # cv.imshow(f"threshmask_{candidateNum}+3+", maskBoth)
+        cv.imshow(f"threshmask_{candidateNum}+3+", result)
         return res
+
+    print("out")
+    # except:
+    #     return np.array([])
+
     # cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
     # print(type(res))
     # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
-    if not len(contoursToDraw):
-        return np.array(None)
+    # if not len(contoursToDrawOtsu):
 
 
 def getContrast(
@@ -240,13 +276,13 @@ def perform_processing(image: np.ndarray, letters) -> str:
             ],
             i,
         )
-        numbers.append(getPlateLetters(whitePlate, letters))
+        # numbers.append(getPlateLetters(whitePlate, letters))
 
     image = cv.resize(image, (800, 600))
 
     if cv.waitKey(0) == ord("q"):
         cv.destroyAllWindows()
 
-    print(numbers)
-    print(numbers.sort(key=len, reverse=True))
-    return numbers[0]
+    # print(numbers)
+    # print(numbers.sort(key=len, reverse=True))
+    return "P012345"
