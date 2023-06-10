@@ -2,6 +2,7 @@ import numpy as np
 import cv2 as cv
 import imutils
 from imutils import contours
+from skimage.metrics import structural_similarity as ssim
 
 
 def readLetters(path):
@@ -17,6 +18,7 @@ def matchLetter(letter, letters):
     results = {}
     maxResult = 0
     bestVal = None
+    values = []
     for l in letters:
         # letters[l] = cv.cvtColor(letters[l], cv.COLOR_BGR2GRAY)
         # letter = cv.cvtColor(letter, cv.COLOR_BGR2GRAY)
@@ -27,66 +29,126 @@ def matchLetter(letter, letters):
         if max_val > maxResult:
             bestVal = l
             maxResult = max_val
-
+            values.append(bestVal)
+    # print(f"letter_{str(bestVal)}_{len(values)}", values)
+    # cv.imshow(f"letter_{str(bestVal)}_{len(values)}", letter)
     return str(bestVal)
 
 
-def getPlateLetters(plate, letters):
-    try:
-        if plate == None:
-            return "PO13245"
-    except:
-        #     print("plate none")
-        #     return "PO13245"
-        if not plate.shape or plate.all(None):
-            print("1st ret")
-            return "PO13245"
-        # plate = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
-        # cv.imshow("plate", plate)
-        try:
-            ctr = cv.findContours(plate, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-            # if not ctr or ctr[1].any(None):
-            #     print("2nd ret")
-            #     return "PO13245"
-            contours2 = imutils.grab_contours(ctr)
-            (contours2, bboxes) = contours.sort_contours(
-                contours2, method="left-to-right"
-            )
-            letters_candidates = []
-            for i, cnt in enumerate(contours2):
-                x, y, w, h = cv.boundingRect(cnt)
-                approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
-                if h >= plate.shape[0] / 3 and (w / h) >= 0.25 and (w / h) <= 1.2:
-                    letters_candidates.append(cnt)
-                letters_sorted = sorted(
-                    letters_candidates,
-                    key=lambda a: cv.boundingRect(a)[3],
-                    reverse=False,
-                )[:7]
-            letters_roi = []
-            for let in letters_candidates:
-                x, y, w, h = cv.boundingRect(let)
-                pts1 = np.float32([[x, y], [x + w, y], [x, y + h], [x + w, y + h]])
-                pts2 = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
-                matrix = cv.getPerspectiveTransform(pts1, pts2)
-                result = cv.warpPerspective(plate, matrix, (w, h))
-                letters_roi.append(result)
-                # cv.imshow(f"test_{i}", result)
-                rect = cv.minAreaRect(let)
-                box = cv.boxPoints(rect)
-                box = np.int0(box)
+def getPlateLetters(plate, letters, i):
+    if not plate.any():
+        return "PO33344"
+    plate3 = cv.cvtColor(plate, cv.COLOR_GRAY2BGR)
+    ctr = cv.findContours(plate, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    contours2 = imutils.grab_contours(ctr)
+    (contours2, bboxes) = contours.sort_contours(contours2, method="left-to-right")
+    letters_candidates = []
+    for i, cnt in enumerate(contours2):
+        x, y, w, h = cv.boundingRect(cnt)
+        approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
+        if h >= plate.shape[0] / 3 and (w / h) >= 0.2 and (w / h) <= 1.3:
+            letters_candidates.append(cnt)
+        letters_sorted = sorted(
+            letters_candidates,
+            key=lambda a: cv.boundingRect(a)[3],
+            reverse=False,
+        )
+    cv.drawContours(plate3, letters_candidates, -1, (0, 255, 0), 5)
+    cv.imshow(f"letter_candidates_{i}", plate3)
+    letters_roi = []
+    for let in letters_candidates:
+        x, y, w, h = cv.boundingRect(let)
+        if h < 0.7 * plate.shape[0]:
+            continue
+        pts1 = np.float32([[x, y], [x + w, y], [x, y + h], [x + w, y + h]])
+        pts2 = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
+        matrix = cv.getPerspectiveTransform(pts1, pts2)
+        result = cv.warpPerspective(plate, matrix, (w, h))
 
-            plateString = []
-            print("[][][][][][][][][][]")
-            for i, cnt in enumerate(letters_roi):
-                letter = cv.resize(cnt, (64, 64), interpolation=cv.INTER_AREA)
-                plateString.append(matchLetter(letter, letters))
-                print("mather")
-                cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
-                cv.imshow(f"plate_{i}", cnt)
-            return "".join(plateString)
-        except:
-            return "PO32456"
+        letters_roi.append(result)
+        # cv.imshow(f"test_{i}", result)
+        rect = cv.minAreaRect(let)
+        box = cv.boxPoints(rect)
+        box = np.int0(box)
+    plateString = []
+    # print("[][][][][][][][][][]")
+    for i, cnt in enumerate(letters_roi):
+        letter = cv.resize(cnt, (64, 64), interpolation=cv.INTER_AREA)
+        if cv.countNonZero(letter) / (letter.shape[0] * letter.shape[1]) > 0.85:
+            continue
+        plateString.append(matchLetter(letter, letters))
+        # print("mather")
+        # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
+        # cv.imshow(f"plate_{i}", cnt)
+    # print("".join(plateString))
+    return "".join(plateString)
+
+
+# except:
+#     return "PO32456"
+
+# cv.imshow("plate", plate3)
+# return "PO12345"
+
+
+# def getPlateLetters(plate, letters):
+#     try:
+#         if plate == None:
+#             print("plate none")
+#             return "PO13245"
+#     except:
+#         #     print("plate none")
+#         #     return "PO13245"
+#         if not plate.shape or plate.all(None):
+#             print("1st ret")
+#             return "PO13245"
+#         # plate = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
+#         # cv.imshow("plate", plate)
+#         try:
+#             ctr = cv.findContours(plate, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+#             # if not ctr or ctr[1].any(None):
+#             #     print("2nd ret")
+#             #     return "PO13245"
+#             contours2 = imutils.grab_contours(ctr)
+#             (contours2, bboxes) = contours.sort_contours(
+#                 contours2, method="left-to-right"
+#             )
+#             letters_candidates = []
+#             for i, cnt in enumerate(contours2):
+#                 x, y, w, h = cv.boundingRect(cnt)
+#                 approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
+#                 if h >= plate.shape[0] / 3 and (w / h) >= 0.25 and (w / h) <= 1.2:
+#                     letters_candidates.append(cnt)
+#                 letters_sorted = sorted(
+#                     letters_candidates,
+#                     key=lambda a: cv.boundingRect(a)[3],
+#                     reverse=False,
+#                 )[:7]
+#             letters_roi = []
+#             for let in letters_candidates:
+#                 x, y, w, h = cv.boundingRect(let)
+#                 pts1 = np.float32([[x, y], [x + w, y], [x, y + h], [x + w, y + h]])
+#                 pts2 = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
+#                 matrix = cv.getPerspectiveTransform(pts1, pts2)
+#                 result = cv.warpPerspective(plate, matrix, (w, h))
+#                 letters_roi.append(result)
+#                 # cv.imshow(f"test_{i}", result)
+#                 rect = cv.minAreaRect(let)
+#                 box = cv.boxPoints(rect)
+#                 box = np.int0(box)
+
+#             plateString = []
+#             print("[][][][][][][][][][]")
+#             for i, cnt in enumerate(letters_roi):
+#                 letter = cv.resize(cnt, (64, 64), interpolation=cv.INTER_AREA)
+#                 plateString.append(matchLetter(letter, letters))
+#                 print("mather")
+#                 # cv.drawContours(plate, [cnt], -1, (0, 255, 0), 3)
+#                 # cv.imshow(f"plate_{i}", cnt)
+#             print("".join(plateString))
+#             return "".join(plateString)
+#         except:
+#             return "PO32456"
 
 
 def getWhitePlate(plate, image, i):
@@ -121,7 +183,7 @@ def getWhitePlate(plate, image, i):
     hierarchy = hierarchy[0]
     contoursToDrawOtsu = []
     contoursToDrawAdapt = []
-    mask = []
+    mask = None
     for i, cnt in enumerate(contoursOtsu):
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
         (x, y), (w, h), angle = cv.minAreaRect(cnt)
@@ -135,10 +197,10 @@ def getWhitePlate(plate, image, i):
         if cv.contourArea(cnt) > 4000 and len(approx) == 4:
             if ((w / h) <= 7 and (w / h) >= 2) or ((w / h) >= 0.1 and (w / h) <= 0.5):
                 contoursToDrawAdapt.append(cnt)
-    approx = np.array([])
+    approx = []
     meanTooLow = False
     if len(contoursToDrawOtsu) and len(contoursToDrawAdapt):
-        print("if")
+        # print("if")
         contOtsu = sorted(contoursToDrawOtsu, key=cv.contourArea, reverse=True)[0]
         contAdapt = sorted(contoursToDrawAdapt, key=cv.contourArea, reverse=True)[0]
         cv.drawContours(maskOtsu, [contOtsu], -1, (255, 255, 255), -1)
@@ -155,19 +217,19 @@ def getWhitePlate(plate, image, i):
                 cv.RETR_EXTERNAL,
                 cv.CHAIN_APPROX_SIMPLE,
             )
-            cv.imshow(f"maskBoth{i}", cv.resize(maskBoth, (800, 600)))
+            # cv.imshow(f"maskBoth{i}", cv.resize(maskBoth, (800, 600)))
             approx = cv.convexHull(contoursMask[0])
             mask = maskBoth
         else:
             meanTooLow = True
 
     if meanTooLow or not len(contoursToDrawAdapt) and len(contoursToDrawOtsu):
-        print("elif")
+        # print("elif")
         contOtsu = sorted(contoursToDrawOtsu, key=cv.contourArea, reverse=True)[0]
         cv.drawContours(maskOtsu, [contOtsu], -1, (255, 255, 255), -1)
         if np.mean(maskOtsu) < 0.1:
             # return np.array([])
-            pass
+            return np.array([])
         contoursMask, hierarchyMAsk = cv.findContours(
             cv.cvtColor(maskOtsu, cv.COLOR_BGR2GRAY),
             cv.RETR_EXTERNAL,
@@ -208,18 +270,19 @@ def getWhitePlate(plate, image, i):
         result = cv.warpPerspective(
             cv.cvtColor(res, cv.COLOR_BGR2GRAY), matrix, (520 * 2, 114 * 2)
         )
+        result = cv.copyMakeBorder(result, 5, 5, 5, 5, cv.BORDER_CONSTANT, None, 255)
 
-        cv.imshow(f"threshmask_{candidateNum}+3+", result)
-        print("before count")
-        print(cv.countNonZero(result) / (plate.shape[0] * plate.shape[1]))
-        if cv.countNonZero(result) / (threshOtsu.shape[0] * threshOtsu.shape[1]) > 0.2:
+        # cv.imshow(f"threshmask_{candidateNum}+3+", result)
+        # print("before count")
+        # print(cv.countNonZero(result) / (result.shape[0] * result.shape[1]))
+        if cv.countNonZero(result) / (result.shape[0] * result.shape[1]) > 0.2:
             return result
         else:
-            pass
+            return np.array([])
     except:
-        print("exception")
+        # print("exception")
         # return np.array([])
-        pass
+        return np.array([])
 
     # cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
     # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
@@ -281,7 +344,7 @@ def getPlate(image: np.ndarray, gray):
                         int(x * 0.94) : int((x + w) * 1.06),
                     ]
                 )
-    cv.imshow("curImg", cv.resize(curImg, (1280, 720)))
+    # cv.imshow("curImg", cv.resize(curImg, (1280, 720)))
     return candidates, candidates_boxes
 
 
@@ -299,7 +362,7 @@ def perform_processing(image: np.ndarray, letters) -> str:
 
     numbers = []
     for i, can in enumerate(candidates):
-        cv.imshow(f"cand_{i}", cv.resize(can, (800, 600)))
+        # cv.imshow(f"cand_{i}", cv.resize(can, (800, 600)))
         x, y, w, h = candidates_boxes[i]
         whitePlate = getWhitePlate(
             can,
@@ -309,15 +372,15 @@ def perform_processing(image: np.ndarray, letters) -> str:
             ],
             i,
         )
-        numbers.append(getPlateLetters(whitePlate, letters))
+        numbers.append(getPlateLetters(whitePlate, letters, i))
 
     image = cv.resize(image, (800, 600))
 
+    print(numbers)
+    # print(numbers.sort(key=len, reverse=True))
     if cv.waitKey(0) == ord("q"):
         cv.destroyAllWindows()
 
-    print(numbers)
-    print(numbers.sort(key=len, reverse=True))
     numbers = [num for num in numbers if len(num) <= 8]
     resNumber = numbers[0] if len(numbers) else "P012345"
 
