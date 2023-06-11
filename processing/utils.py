@@ -75,7 +75,7 @@ def getPlateLetters(plate, letters, i):
             continue
         plateString.append(matchLetter(letter, letters))
 
-    for i, letter in plateString:
+    for i, letter in enumerate(plateString):
         letter = "O" if (letter == "0" and i < 3) else letter
     return "".join(plateString)
 
