@@ -34,7 +34,6 @@ def main():
             print(f"Error loading image {image_path}")
             continue
 
-        print(image_path.name)
         results[image_path.name] = perform_processing(image, letters)
 
     with results_file.open("w") as output_file:
