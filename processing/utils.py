@@ -39,11 +39,14 @@ def getPlateLetters(plate, letters, i):
         np.bitwise_not(plate), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
     )
     contours2 = imutils.grab_contours(ctr)
-    (contours2, bboxes) = contours.sort_contours(contours2, method="left-to-right")
+    try:
+        (contours2, bboxes) = contours.sort_contours(contours2, method="left-to-right")
+    except:
+        pass
     letters_candidates = []
     for i, cnt in enumerate(contours2):
         x, y, w, h = cv.boundingRect(cnt)
-        if h >= plate.shape[0] / 3 and (w / h) >= 0.2 and (w / h) <= 1.3:
+        if h >= plate.shape[0] / 3 and (w / h) >= 0.15 and (w / h) <= 1.3:
             letters_candidates.append(cnt)
         letters_sorted = sorted(
             letters_candidates,
@@ -55,7 +58,6 @@ def getPlateLetters(plate, letters, i):
     for let in letters_candidates:
         x, y, w, h = cv.boundingRect(let)
         if h < 0.5 * plate.shape[0]:
-            cv.drawContours(plate3, [let], -1, (0, 0, 255), 4)
             continue
         pts1 = np.float32([[x, y], [x + w, y], [x, y + h], [x + w, y + h]])
         pts2 = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
@@ -66,14 +68,15 @@ def getPlateLetters(plate, letters, i):
         rect = cv.minAreaRect(let)
         box = cv.boxPoints(rect)
         box = np.int0(box)
-    cv.imshow(f"letter_candidates_{i}", plate3)
-
     plateString = []
     for i, cnt in enumerate(letters_roi):
         letter = cv.resize(cnt, (64, 64), interpolation=cv.INTER_AREA)
-        if cv.countNonZero(letter) / (letter.shape[0] * letter.shape[1]) > 0.8:
+        if cv.countNonZero(letter) / (letter.shape[0] * letter.shape[1]) > 0.85:
             continue
         plateString.append(matchLetter(letter, letters))
+
+    for i, letter in plateString:
+        letter = "O" if (letter == "0" and i < 3) else letter
     return "".join(plateString)
 
 
@@ -329,9 +332,6 @@ def perform_processing(image: np.ndarray, letters) -> str:
     image = cv.resize(image, (800, 600))
 
     numbers = [num for num in numbers if len(num) <= 8]
-    resNumber = numbers[0] if len(numbers) else "P012345"
-    print(resNumber, "\n\n")
-    if cv.waitKey(0) == ord("q"):
-        cv.destroyAllWindows()
+    resNumber = numbers[0] if len(numbers) and len(numbers[0]) else "P012345"
 
     return resNumber
