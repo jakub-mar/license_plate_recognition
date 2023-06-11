@@ -71,7 +71,7 @@ def getPlateLetters(plate, letters, i):
     plateString = []
     for i, cnt in enumerate(letters_roi):
         letter = cv.resize(cnt, (64, 64), interpolation=cv.INTER_AREA)
-        if cv.countNonZero(letter) / (letter.shape[0] * letter.shape[1]) > 0.85:
+        if cv.countNonZero(letter) / (letter.shape[0] * letter.shape[1]) > 0.8:
             continue
         plateString.append(matchLetter(letter, letters))
     return "".join(plateString)
@@ -85,7 +85,6 @@ def getWhitePlate(plate, image, i):
     # threshold otsu
     ret, threshOtsu = cv.threshold(plate, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
     threshOtsu = cv.erode(threshOtsu, np.ones((7, 7), np.uint8))
-    # cv.imshow(f"threshOtsu_{i}", threshOtsu)
     contoursOtsu, hierarchy = cv.findContours(
         threshOtsu, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
     )
@@ -108,7 +107,7 @@ def getWhitePlate(plate, image, i):
     hierarchy = hierarchy[0]
     contoursToDrawOtsu = []
     contoursToDrawAdapt = []
-    mask = np.array([])
+    mask = np.zeros_like(threshOtsu)
     for i, cnt in enumerate(contoursOtsu):
         approx = cv.approxPolyDP(cnt, 0.05 * cv.arcLength(cnt, True), True)
         (x, y), (w, h), angle = cv.minAreaRect(cnt)
@@ -140,26 +139,46 @@ def getWhitePlate(plate, image, i):
                 cv.RETR_EXTERNAL,
                 cv.CHAIN_APPROX_SIMPLE,
             )
+            contoursMask = sorted(
+                contoursMask, key=lambda x: cv.contourArea(x), reverse=True
+            )
             approx = cv.convexHull(contoursMask[0])
             mask = maskBoth
         else:
             meanTooLow = True
+            maskAdaptive = np.zeros_like(threshOtsu)
 
     if meanTooLow or not len(contoursToDrawAdapt) and len(contoursToDrawOtsu):
-        print("else no 2")
         contOtsu = sorted(contoursToDrawOtsu, key=cv.contourArea, reverse=True)[0]
         cv.drawContours(maskOtsu, [contOtsu], -1, (255, 255, 255), -1)
-        if np.mean(maskOtsu) < 0.1:
-            return np.array([])
         contoursMask, hierarchyMAsk = cv.findContours(
             cv.cvtColor(maskOtsu, cv.COLOR_BGR2GRAY),
             cv.RETR_EXTERNAL,
             cv.CHAIN_APPROX_SIMPLE,
         )
+        contoursMask = sorted(
+            contoursMask, key=lambda x: cv.contourArea(x), reverse=True
+        )
         approx = cv.convexHull(contoursMask[0])
         mask = maskOtsu
+
+    if len(contoursToDrawAdapt) and not len(contoursToDrawOtsu):
+        contAdapt = sorted(contoursToDrawAdapt, key=cv.contourArea, reverse=True)[0]
+        cv.drawContours(maskAdaptive, [contAdapt], -1, (255, 255, 255), -1)
+        contoursMask, hierarchyMAsk = cv.findContours(
+            cv.cvtColor(maskAdaptive, cv.COLOR_BGR2GRAY),
+            cv.RETR_EXTERNAL,
+            cv.CHAIN_APPROX_SIMPLE,
+        )
+        contoursMask = sorted(
+            contoursMask, key=lambda x: cv.contourArea(x), reverse=True
+        )
+        cv.drawContours(maskAdaptive, [contoursMask[0]], -1, (0.255, 0), 5)
+        approx = cv.convexHull(contoursMask[0])
+        mask = maskAdaptive
+
     if not mask.any():
-        mask = cv.cvtColor(threshOtsu, cv.COLOR_BGR2GRAY)
+        mask = np.zeros_like(threshOtsu)
     try:
         LT = [0, 0]
         LB = [0, plate.shape[0]]
@@ -179,7 +198,7 @@ def getWhitePlate(plate, image, i):
                 ]
             )
 
-        res = cv.bitwise_and(threshOtsu, maskBoth)
+        res = cv.bitwise_and(threshOtsu, mask)
         pts2 = np.array(
             [[0, 0], [0, 114 * 2], [520 * 2, 114 * 2], [520 * 2, 0]], np.float32
         )
@@ -191,22 +210,12 @@ def getWhitePlate(plate, image, i):
         )
         result = cv.copyMakeBorder(result, 5, 5, 5, 5, cv.BORDER_CONSTANT, None, 255)
 
-        # cv.imshow(f"threshmask_{candidateNum}+3+", result)
-        # print("before count")
-        # print(cv.countNonZero(result) / (result.shape[0] * result.shape[1]))
         if cv.countNonZero(result) / (result.shape[0] * result.shape[1]) > 0.2:
             return result
         else:
-            print("count non zero")
             return cv.cvtColor(threshOtsu, cv.COLOR_BGR2GRAY)
     except:
-        print("exception")
-        # return np.array([])
         return cv.cvtColor(threshOtsu, cv.COLOR_BGR2GRAY)
-
-    # cv.imshow(f"thresh_{candidateNum}++", cv.resize(thresh2, (800, 600)))
-    # cv.imshow(f"plate_{i}", cv.resize(image, (800, 600)))
-    # if not len(contoursToDrawOtsu):
 
 
 def getContrast(
@@ -264,14 +273,11 @@ def getPlate(image: np.ndarray, gray):
                         int(x * 0.94) : int((x + w) * 1.06),
                     ]
                 )
-    # cv.imshow("curImg", cv.resize(curImg, (1280, 720)))
     if not len(candidates):
-        # plate = cv.cvtColor(image, cv.COLOR_GRAY2BGR)
         threshAdaptive = cv.adaptiveThreshold(
             image, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 23, 1
         )
         threshAdaptive = cv.morphologyEx(threshAdaptive, cv.MORPH_CLOSE, (7, 7))
-        # threshAdaptive = cv.erode(threshAdaptive, np.ones((3, 3), np.uint8))
         threshAdaptive = cv.morphologyEx(threshAdaptive, cv.MORPH_OPEN, (7, 7))
         thColor = cv.cvtColor(threshAdaptive, cv.COLOR_GRAY2BGR)
         cntrs, h = cv.findContours(threshAdaptive, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
@@ -293,8 +299,6 @@ def getPlate(image: np.ndarray, gray):
                     )
         except:
             pass
-        # cv.imshow(f"threshAdaptive_{i}", cv.resize(threshAdaptive, (1280, 720)))
-        # cv.imshow(f"thColor{i}", cv.resize(thColor, (1280, 720)))
     return candidates, candidates_boxes
 
 
@@ -306,14 +310,12 @@ def perform_processing(image: np.ndarray, letters) -> str:
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     grayC = getContrast(gray, 3, 3, 0)
     blurred = cv.bilateralFilter(grayC, 20, 50, 50)
-    # cv.imshow("orig", cv.resize(gray, (800, 600)))
 
     candidates, candidates_boxes = getPlate(blurred, gray)
 
     numbers = []
     for i, can in enumerate(candidates):
         x, y, w, h = candidates_boxes[i]
-        # cv.imshow(f"cand_{i}", cv.resize(can, (800, 600)))
         whitePlate = getWhitePlate(
             can,
             image[
@@ -328,7 +330,7 @@ def perform_processing(image: np.ndarray, letters) -> str:
 
     numbers = [num for num in numbers if len(num) <= 8]
     resNumber = numbers[0] if len(numbers) else "P012345"
-    print(resNumber)
+    print(resNumber, "\n\n")
     if cv.waitKey(0) == ord("q"):
         cv.destroyAllWindows()
 
