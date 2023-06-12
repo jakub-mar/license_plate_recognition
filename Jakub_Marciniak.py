@@ -16,9 +16,12 @@ def main():
     args = parser.parse_args()
 
     images_dir = Path(args.images_dir)
-    letters_dir = Path("./letters")
     results_file = Path(args.results_file)
+
+    # Loading the characters used for templateMatch
+    letters_dir = Path("./letters")
     letters = readLetters(letters_dir)
+
     images_paths = sorted(
         [
             image_path
